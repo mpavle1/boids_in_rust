@@ -1,4 +1,4 @@
-use std::f64::consts::{FRAC_PI_2, PI};
+use std::f64::consts::{FRAC_PI_2, PI, SQRT_2};
 
 use piston_window::*;
 use piston_window::{PistonWindow, WindowSettings};
@@ -9,10 +9,11 @@ const SCREEN_WIDTH: u32 = 800;
 const SCREEN_HEIGHT: u32 = 600;
 
 const SCREEN_BUFFER: f64 = 15.0;
+const NUMBER_OF_BOIDS: usize = 50;
 
 const BLACK_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 struct Point {
     x: f64,
     y: f64,
@@ -21,9 +22,13 @@ struct Point {
 #[derive(Copy, Clone)]
 struct Boid {
     point: Point,
-    direction: f64, // Privremeno dok ne smislim kako cu ovo da pratim
+    direction: f64,
     velocity: f64,
     color: [f32; 4],
+}
+
+fn are_two_points_in_range(a: Point, b: Point) -> bool {
+    ((a.x - b.x).powf(2.0) + (a.y - b.y).powf(2.0)).sqrt() < 30.0
 }
 
 fn rotate_point(point: Point, angle_rad: f64, d: f64) -> Point {
@@ -35,8 +40,6 @@ fn rotate_point(point: Point, angle_rad: f64, d: f64) -> Point {
 
     Point { x: new_x, y: new_y }
 }
-
-fn center_of_mass_rule(boid: &mut Boid, all_boids: Vec<Boid>) -> () {}
 
 impl Boid {
     fn new() -> Self {
@@ -74,21 +77,92 @@ impl Boid {
             g,
         );
     }
+    // This functionality has been moved to struct Boids as i currenlty do not know how
+    // to fix the mutable reference passing issue
+    // fn update(&mut self, boids: &[Boid]) -> () {
+    //     let point = rotate_point(self.point, self.direction, self.velocity);
 
-    fn update(&mut self, boids: Vec<Boid>) -> () {
-        let point = rotate_point(self.point, self.direction, self.velocity);
+    //     if point.x < SCREEN_BUFFER {
+    //         self.direction = 1.0 * PI - self.direction;
+    //     } else if point.y < SCREEN_BUFFER {
+    //         self.direction = 2.0 * PI - self.direction;
+    //     } else if point.x > (SCREEN_WIDTH as f64 - SCREEN_BUFFER) {
+    //         self.direction = 1.0 * PI - self.direction;
+    //     } else if point.y > (SCREEN_HEIGHT as f64 - SCREEN_BUFFER) {
+    //         self.direction = 0.0 * PI - self.direction;
+    //     }
 
-        if point.x < SCREEN_BUFFER {
-            self.direction = 1.0 * PI - self.direction;
-        } else if point.y < SCREEN_BUFFER {
-            self.direction = 2.0 * PI - self.direction;
-        } else if point.x > (SCREEN_WIDTH as f64 - SCREEN_BUFFER) {
-            self.direction = 1.0 * PI - self.direction;
-        } else if point.y > (SCREEN_HEIGHT as f64 - SCREEN_BUFFER) {
-            self.direction = 0.0 * PI - self.direction;
+    //     self.point = point;
+    // }
+}
+
+struct Boids {
+    boids: [Boid; NUMBER_OF_BOIDS],
+}
+
+impl Boids {
+    fn new() -> Self {
+        Self {
+            boids: std::array::from_fn(|_| Boid::new()),
         }
+    }
 
-        self.point = point;
+    fn update(&mut self) -> () {
+        let boids = &mut self.boids;
+        let number_of_boids = boids.len();
+
+        for i in 0..number_of_boids {
+            let point = rotate_point(boids[i].point, boids[i].direction, boids[i].velocity);
+
+            // update boid position due to the edge of the screen
+            if point.x < SCREEN_BUFFER {
+                boids[i].direction = 1.0 * PI - boids[i].direction;
+            } else if point.y < SCREEN_BUFFER {
+                boids[i].direction = 2.0 * PI - boids[i].direction;
+            } else if point.x > (SCREEN_WIDTH as f64 - SCREEN_BUFFER) {
+                boids[i].direction = 1.0 * PI - boids[i].direction;
+            } else if point.y > (SCREEN_HEIGHT as f64 - SCREEN_BUFFER) {
+                boids[i].direction = 0.0 * PI - boids[i].direction;
+            } else {
+                let mut average_x = 0.0;
+                let mut average_y = 0.0;
+
+                let mut number_of_boids_in_range = 0;
+
+                for j in 0..number_of_boids {
+                    if boids[i].point == boids[j].point {
+                        continue;
+                    }
+
+                    if are_two_points_in_range(boids[i].point, boids[j].point) {
+                        number_of_boids_in_range += 1;
+                        average_x += boids[j].point.x;
+                        average_y += boids[j].point.y;
+                    }
+                }
+
+                // change the angle of the boid so that it goes to the center mass position;
+                if number_of_boids_in_range > 0 {
+                    average_x = average_x / number_of_boids as f64;
+                    average_y = average_y / number_of_boids as f64;
+
+                    let new_angle =
+                        (average_y - boids[i].point.y).atan2(average_x - boids[i].point.x);
+
+                    let new_direction = (new_angle - boids[i].direction) / 300.0;
+
+                    boids[i].direction += new_direction;
+                }
+            }
+
+            boids[i].point = point;
+        }
+    }
+
+    fn draw(&self, ctx: &Context, g: &mut G2d) {
+        for boid in self.boids {
+            boid.draw(&ctx, g);
+        }
     }
 }
 
@@ -99,25 +173,18 @@ fn main() {
             .build()
             .unwrap();
 
-    let mut boids: Vec<Boid> = Vec::new();
-
-    for _ in 0..=75 {
-        boids.push(Boid::new());
-    }
+    let boids = &mut Boids::new();
 
     // dodati proveri za delta time, tako da imamo konstantan FPS
 
-    let boid_ref: &mut Vec<Boid> = &mut boids;
+    // let boid_ref: Vec<Boid> = boids;
 
     while let Some(event) = window.next() {
         window.draw_2d(&event, |ctx, g, _| {
             clear(BLACK_COLOR, g);
 
-            for i in 0..boid_ref.len() {
-                let vec = boid_ref.to_vec();
-                boid_ref[i].update(vec);
-                boid_ref[i].draw(&ctx, g);
-            }
+            boids.update();
+            boids.draw(&ctx, g);
         });
     }
 }
