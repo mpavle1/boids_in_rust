@@ -141,7 +141,9 @@ impl Boids {
                     }
                 }
 
-                // change the angle of the boid so that it goes to the center mass position;
+                // Proveriti logiku. Trenutno izgleda kao da delimicno radi. Tj ako imamo
+                // samo ovo pravilo onda bi trebali da se grupisu jedni na druge u slucaju da je update
+                // u svakoj iteraciji.
                 if number_of_boids_in_range > 0 {
                     average_x = average_x / number_of_boids as f64;
                     average_y = average_y / number_of_boids as f64;
@@ -176,8 +178,6 @@ fn main() {
     let boids = &mut Boids::new();
 
     // dodati proveri za delta time, tako da imamo konstantan FPS
-
-    // let boid_ref: Vec<Boid> = boids;
 
     while let Some(event) = window.next() {
         window.draw_2d(&event, |ctx, g, _| {
