@@ -11,3 +11,7 @@ Just run the following command, and a window with the simulation will appear
 ```rust
 cargo run
 ```
+
+## Important
+
+The projects is not yet finished, as not all rules have yet been implementd
